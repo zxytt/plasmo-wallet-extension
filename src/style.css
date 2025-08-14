@@ -1,0 +1,21 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+#plasmo-shadow-container {
+  all: initial;
+  box-sizing: border-box;
+}
+
+/* 确保弹窗有足够的宽度 */
+body {
+  min-width: 420px !important;
+  width: 420px !important;
+}
+
+html {
+  min-width: 420px !important;
+  width: 420px !important;
+}
