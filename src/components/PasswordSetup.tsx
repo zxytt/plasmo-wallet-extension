@@ -1,6 +1,8 @@
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { Button } from "./Button"
+import { PasswordStrengthIndicator } from "./PasswordStrengthIndicator"
 import { CryptoService } from "~services/CryptoService"
+import { SecurityService } from "~services/SecurityService"
 
 interface PasswordSetupProps {
   onPasswordSet: (password: string) => void
@@ -10,7 +12,18 @@ interface PasswordSetupProps {
 export function PasswordSetup({ onPasswordSet, onBack }: PasswordSetupProps) {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [passwordStrength, setPasswordStrength] = useState<{ isValid: boolean; message: string } | null>(null)
+  const [passwordStrength, setPasswordStrength] = useState<{ 
+    isValid: boolean; 
+    message: string; 
+    score: number;
+    requirements: {
+      length: boolean
+      hasLower: boolean
+      hasUpper: boolean
+      hasNumber: boolean
+      hasSpecial: boolean
+    }
+  } | null>(null)
   const [showPassword, setShowPassword] = useState(false)
 
   const handlePasswordChange = (value: string) => {
@@ -40,17 +53,32 @@ export function PasswordSetup({ onPasswordSet, onBack }: PasswordSetupProps) {
     }
 
     onPasswordSet(password)
+    
+    // 清理敏感数据
+    clearSensitiveData()
   }
 
-  const getStrengthColor = () => {
-    if (!passwordStrength) return 'text-gray-500'
-    return passwordStrength.isValid ? 'text-green-600' : 'text-red-600'
+  // 清理敏感数据
+  const clearSensitiveData = () => {
+    // 安全清理密码
+    SecurityService.clearPassword(password)
+    SecurityService.clearPassword(confirmPassword)
+    
+    setPassword('')
+    setConfirmPassword('')
+    setPasswordStrength(null)
+    
+    console.log('PasswordSetup: 敏感数据已清理')
   }
 
-  const getStrengthBg = () => {
-    if (!passwordStrength) return 'bg-gray-100'
-    return passwordStrength.isValid ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
-  }
+  // 组件卸载时清理敏感数据
+  useEffect(() => {
+    return () => {
+      clearSensitiveData()
+    }
+  }, [])
+
+
 
   return (
     <div className="space-y-6">
@@ -102,14 +130,11 @@ export function PasswordSetup({ onPasswordSet, onBack }: PasswordSetupProps) {
           </div>
         </div>
 
-        {/* 密码强度指示 */}
-        {passwordStrength && (
-          <div className={`p-3 rounded-lg border ${getStrengthBg()}`}>
-            <div className={`text-sm ${getStrengthColor()}`}>
-              {passwordStrength.isValid ? '✅' : '❌'} {passwordStrength.message}
-            </div>
-          </div>
-        )}
+        {/* 密码强度指示器 */}
+        <PasswordStrengthIndicator 
+          strength={passwordStrength} 
+          password={password}
+        />
 
         {/* 确认密码 */}
         <div>
