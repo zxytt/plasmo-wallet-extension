@@ -7,8 +7,10 @@ import { PasswordSetup } from "~components/PasswordSetup"
 import { WalletCreated } from "~components/WalletCreated"
 import { UnlockWallet } from "~components/UnlockWallet"
 import { ImportPrivateKey } from "~components/ImportPrivateKey"
+import { MainWallet } from "~components/MainWallet"
 import { StorageService } from "~services/StorageService"
 import { CryptoService } from "~services/CryptoService"
+import { SecurityService } from "~services/SecurityService"
 
 import "~style.css"
 
@@ -26,6 +28,29 @@ function IndexPopup() {
   // 检查钱包初始化状态
   useEffect(() => {
     checkWalletStatus()
+    
+    // 设置全局内存清理
+    SecurityService.setupGlobalCleanup()
+  }, [])
+
+  // 组件卸载时清理所有敏感数据
+  useEffect(() => {
+    return () => {
+      console.log('Popup 组件卸载，清理敏感数据...')
+      
+      // 清理助记词
+      if (generatedMnemonic) {
+        SecurityService.clearMnemonic(generatedMnemonic)
+      }
+      
+      // 清理私钥
+      if (derivedPrivateKey) {
+        SecurityService.clearPrivateKey(derivedPrivateKey)
+      }
+      
+      // 强制垃圾回收
+      SecurityService.forceGarbageCollection()
+    }
   }, [])
 
   const checkWalletStatus = async () => {
@@ -161,8 +186,8 @@ function IndexPopup() {
   }
 
   const handleWalletCreatedContinue = () => {
-    // 钱包创建完成，返回欢迎界面
-    setCurrentScreen('welcome')
+    // 钱包创建完成，直接进入主钱包界面
+    setCurrentScreen('main')
   }
 
   const handleUnlock = async (password: string) => {
@@ -452,77 +477,33 @@ function IndexPopup() {
 
       case 'main':
         return (
-          <div className="space-y-6">
-            <div className="text-center">
-              <div className="text-4xl mb-3">🎉</div>
-              <h2 className="text-2xl font-bold text-gray-800">钱包已解锁</h2>
-              <p className="text-gray-600 mt-2">
-                欢迎回来！您的钱包已成功解锁
-              </p>
-            </div>
-
-            {/* 账户信息 */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="space-y-3">
-                <div className="text-sm font-medium text-gray-700">当前账户:</div>
-                <div className="bg-gray-50 rounded-lg p-3">
-                  <div className="font-mono text-sm text-gray-800 break-all">
-                    {derivedAddress}
-                  </div>
-                </div>
-                <div className="flex space-x-2">
-                  <Button
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(derivedAddress)
-                        alert('地址已复制')
-                      } catch (error) {
-                        console.error('复制失败:', error)
-                      }
-                    }}
-                    variant="secondary"
-                    className="flex-1 text-sm"
-                  >
-                    📋 复制地址
-                  </Button>
-                  <Button
-                    onClick={() => {
-                      // 清除状态并锁定钱包
-                      setGeneratedMnemonic('')
-                      setDerivedPrivateKey('')
-                      setDerivedAddress('')
-                      setCurrentScreen('unlock')
-                    }}
-                    variant="secondary"
-                    className="flex-1 text-sm"
-                  >
-                    🔒 锁定钱包
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* 网络信息 */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center space-x-2">
-                <span className="text-blue-600">🌐</span>
-                <span className="text-blue-800 text-sm font-medium">Sepolia 测试网络</span>
-              </div>
-              <div className="text-blue-700 text-xs mt-1">
-                余额查询功能即将实现...
-              </div>
-            </div>
-
-            {/* 功能按钮 */}
-            <div className="space-y-3">
-              <Button className="w-full" disabled>
-                💸 发送交易 (即将实现)
-              </Button>
-              <Button variant="secondary" className="w-full" disabled>
-                📥 接收资金 (即将实现)
-              </Button>
-            </div>
-          </div>
+          <MainWallet
+            currentAccount={{
+              address: derivedAddress,
+              privateKey: derivedPrivateKey,
+              mnemonic: generatedMnemonic
+            }}
+            onLockWallet={() => {
+              console.log('锁定钱包，清理敏感数据...')
+              
+              // 安全清理敏感数据
+              if (generatedMnemonic) {
+                SecurityService.clearMnemonic(generatedMnemonic)
+              }
+              if (derivedPrivateKey) {
+                SecurityService.clearPrivateKey(derivedPrivateKey)
+              }
+              
+              // 清除状态并锁定钱包
+              setGeneratedMnemonic('')
+              setDerivedPrivateKey('')
+              setDerivedAddress('')
+              setCurrentScreen('unlock')
+              
+              // 强制垃圾回收
+              SecurityService.forceGarbageCollection()
+            }}
+          />
         )
 
       case 'import':
@@ -530,6 +511,7 @@ function IndexPopup() {
           <ImportPrivateKey
             onImportSuccess={handleImportSuccess}
             onBack={() => setCurrentScreen('welcome')}
+            currentWalletAddress={derivedAddress}
           />
         )
 
