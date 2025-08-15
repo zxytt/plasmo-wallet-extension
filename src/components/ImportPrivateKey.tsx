@@ -1,13 +1,17 @@
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { Button } from "./Button"
+import { ErrorMessage, WarningMessage } from "./ErrorAlert"
 import { CryptoService } from "~services/CryptoService"
+import { StorageService } from "~services/StorageService"
+import { SecurityService } from "~services/SecurityService"
 
 interface ImportPrivateKeyProps {
   onImportSuccess: (privateKey: string, address: string) => void
   onBack?: () => void
+  currentWalletAddress?: string // 当前钱包地址，用于重复检查
 }
 
-export function ImportPrivateKey({ onImportSuccess, onBack }: ImportPrivateKeyProps) {
+export function ImportPrivateKey({ onImportSuccess, onBack, currentWalletAddress }: ImportPrivateKeyProps) {
   const [privateKey, setPrivateKey] = useState('')
   const [derivedAddress, setDerivedAddress] = useState('')
   const [isValidating, setIsValidating] = useState(false)
@@ -28,7 +32,7 @@ export function ImportPrivateKey({ onImportSuccess, onBack }: ImportPrivateKeyPr
     try {
       // 验证私钥格式
       const isValid = CryptoService.validatePrivateKey(value.trim())
-      
+
       if (!isValid) {
         setError('私钥格式无效，请检查输入')
         setIsValidating(false)
@@ -48,7 +52,7 @@ export function ImportPrivateKey({ onImportSuccess, onBack }: ImportPrivateKeyPr
     }
   }
 
-  const handleImport = () => {
+  const handleImport = async () => {
     if (!privateKey.trim()) {
       setError('请输入私钥')
       return
@@ -59,12 +63,59 @@ export function ImportPrivateKey({ onImportSuccess, onBack }: ImportPrivateKeyPr
       return
     }
 
-    // 格式化私钥（确保有 0x 前缀）
-    const formattedPrivateKey = privateKey.trim().startsWith('0x') 
-      ? privateKey.trim() 
-      : '0x' + privateKey.trim()
+    try {
+      setIsValidating(true)
+      setError('')
 
-    onImportSuccess(formattedPrivateKey, derivedAddress)
+      // 检查账户是否已存在
+      const isDuplicate = await checkAccountExists(derivedAddress)
+      
+      if (isDuplicate) {
+        setError(`该账户地址 ${derivedAddress.slice(0, 10)}...${derivedAddress.slice(-8)} 已存在于钱包中，无需重复导入`)
+        return
+      }
+
+      // 格式化私钥（确保有 0x 前缀）
+      const formattedPrivateKey = privateKey.trim().startsWith('0x')
+        ? privateKey.trim()
+        : '0x' + privateKey.trim()
+
+      onImportSuccess(formattedPrivateKey, derivedAddress)
+    } catch (error) {
+      console.error('导入检查失败:', error)
+      setError('导入检查失败: ' + error.message)
+    } finally {
+      setIsValidating(false)
+    }
+  }
+
+  // 检查账户是否已存在
+  const checkAccountExists = async (address: string): Promise<boolean> => {
+    try {
+      console.log('检查账户重复性:', address)
+      
+      // 检查是否与当前钱包地址相同
+      if (currentWalletAddress && 
+          address.toLowerCase() === currentWalletAddress.toLowerCase()) {
+        console.log('检测到重复账户:', address)
+        return true
+      }
+
+      // 检查存储中的其他账户（当前实现为单账户，所以主要检查当前地址）
+      const walletData = await StorageService.getEncryptedWallet()
+      if (walletData) {
+        // 如果有钱包数据但没有传入当前地址，说明需要解密才能获取地址
+        // 这种情况下我们无法在不知道密码的情况下检查重复性
+        // 所以我们依赖传入的 currentWalletAddress 参数
+        console.log('钱包数据存在，依赖传入的当前地址进行检查')
+      }
+
+      return false
+    } catch (error) {
+      console.error('检查账户存在性失败:', error)
+      // 出错时返回 false，允许继续导入
+      return false
+    }
   }
 
   const handlePaste = async () => {
@@ -83,6 +134,25 @@ export function ImportPrivateKey({ onImportSuccess, onBack }: ImportPrivateKeyPr
     setDerivedAddress('')
     setError('')
   }
+
+  // 清理敏感数据
+  const clearSensitiveData = () => {
+    // 安全清理私钥
+    SecurityService.clearPrivateKey(privateKey)
+    
+    setPrivateKey('')
+    setDerivedAddress('')
+    setError('')
+    
+    console.log('ImportPrivateKey: 敏感数据已清理')
+  }
+
+  // 组件卸载时清理敏感数据
+  useEffect(() => {
+    return () => {
+      clearSensitiveData()
+    }
+  }, [])
 
   return (
     <div className="space-y-6">
@@ -133,7 +203,7 @@ export function ImportPrivateKey({ onImportSuccess, onBack }: ImportPrivateKeyPr
                 {showPrivateKey ? '🙈 隐藏' : '👁️ 显示'}
               </button>
             </div>
-            
+
             <div className="flex space-x-2">
               <Button
                 onClick={handlePaste}
@@ -165,12 +235,10 @@ export function ImportPrivateKey({ onImportSuccess, onBack }: ImportPrivateKeyPr
 
         {/* 错误提示 */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-            <div className="flex items-center space-x-2">
-              <span className="text-red-600">❌</span>
-              <span className="text-red-800 text-sm">{error}</span>
-            </div>
-          </div>
+          <ErrorMessage 
+            error={error} 
+            onDismiss={() => setError('')}
+          />
         )}
 
         {/* 派生地址显示 */}
@@ -214,7 +282,7 @@ export function ImportPrivateKey({ onImportSuccess, onBack }: ImportPrivateKeyPr
         >
           📥 导入账户
         </Button>
-        
+
         {onBack && (
           <Button onClick={onBack} variant="secondary" className="w-full">
             ← 返回
