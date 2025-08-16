@@ -208,4 +208,68 @@ export class StorageService {
       throw error
     }
   }
+
+  /**
+   * 通用的存储项目设置方法
+   */
+  static async setItem<T>(key: string, value: T): Promise<void> {
+    try {
+      if (!this.isStorageAvailable()) {
+        // 在非扩展环境中使用 localStorage 作为后备
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem(key, JSON.stringify(value))
+          return
+        }
+        throw new Error("存储 API 不可用")
+      }
+
+      await chrome.storage.local.set({ [key]: value })
+    } catch (error) {
+      console.error(`设置存储项目失败 (${key}):`, error)
+      throw error
+    }
+  }
+
+  /**
+   * 通用的存储项目获取方法
+   */
+  static async getItem<T>(key: string): Promise<T | null> {
+    try {
+      if (!this.isStorageAvailable()) {
+        // 在非扩展环境中使用 localStorage 作为后备
+        if (typeof localStorage !== 'undefined') {
+          const item = localStorage.getItem(key)
+          return item ? JSON.parse(item) : null
+        }
+        throw new Error("存储 API 不可用")
+      }
+
+      const result = await chrome.storage.local.get([key])
+      return result[key] || null
+    } catch (error) {
+      console.error(`获取存储项目失败 (${key}):`, error)
+      return null
+    }
+  }
+
+  /**
+   * 通用的存储项目删除方法
+   */
+  static async removeItem(key: string): Promise<void> {
+    try {
+      if (!this.isStorageAvailable()) {
+        // 在非扩展环境中使用 localStorage 作为后备
+        if (typeof localStorage !== 'undefined') {
+          localStorage.removeItem(key)
+          return
+        }
+        throw new Error("存储 API 不可用")
+      }
+
+      await chrome.storage.local.remove([key])
+    } catch (error) {
+      console.error(`删除存储项目失败 (${key}):`, error)
+      throw error
+    }
+  }
 }
