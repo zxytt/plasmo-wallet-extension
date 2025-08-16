@@ -7,10 +7,11 @@ import { PasswordSetup } from "~components/PasswordSetup"
 import { WalletCreated } from "~components/WalletCreated"
 import { UnlockWallet } from "~components/UnlockWallet"
 import { ImportPrivateKey } from "~components/ImportPrivateKey"
-import { MainWallet } from "~components/MainWallet"
+import { WalletTabs } from "~components/WalletTabs"
 import { StorageService } from "~services/StorageService"
 import { CryptoService } from "~services/CryptoService"
 import { SecurityService } from "~services/SecurityService"
+import { initTheme } from "~utils/theme"
 
 import "~style.css"
 
@@ -29,8 +30,18 @@ function IndexPopup() {
   useEffect(() => {
     checkWalletStatus()
     
+    // 初始化主题系统
+    const cleanupTheme = initTheme()
+    
     // 设置全局内存清理
     SecurityService.setupGlobalCleanup()
+    
+    // 返回清理函数
+    return () => {
+      if (cleanupTheme) {
+        cleanupTheme()
+      }
+    }
   }, [])
 
   // 组件卸载时清理所有敏感数据
@@ -477,7 +488,7 @@ function IndexPopup() {
 
       case 'main':
         return (
-          <MainWallet
+          <WalletTabs
             currentAccount={{
               address: derivedAddress,
               privateKey: derivedPrivateKey,

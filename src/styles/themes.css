@@ -1,0 +1,96 @@
+/* 主题系统 - 支持明暗模式切换 */
+
+/* 默认主题（浅色模式） */
+:root {
+  --theme-background: var(--color-gray-50);
+  --theme-surface: #ffffff;
+  --theme-surface-secondary: var(--color-gray-100);
+  --theme-text-primary: var(--color-gray-900);
+  --theme-text-secondary: var(--color-gray-600);
+  --theme-text-muted: var(--color-gray-400);
+  --theme-border: var(--color-gray-200);
+  --theme-border-light: var(--color-gray-100);
+  --theme-shadow: var(--shadow-md);
+  --theme-shadow-light: var(--shadow-sm);
+}
+
+/* 深色主题 */
+[data-theme="dark"] {
+  --theme-background: #0f0f0f;
+  --theme-surface: #1a1a1a;
+  --theme-surface-secondary: #2a2a2a;
+  --theme-text-primary: #ffffff;
+  --theme-text-secondary: #d1d5db;
+  --theme-text-muted: #9ca3af;
+  --theme-border: #404040;
+  --theme-border-light: #333333;
+  --theme-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  --theme-shadow-light: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  
+  /* 深色模式下的颜色调整 */
+  --color-primary-50: #1e3a8a;
+  --color-primary-100: #1d4ed8;
+  --color-primary-200: #2563eb;
+  --color-primary-300: #3b82f6;
+  --color-primary-400: #60a5fa;
+  --color-primary-500: #93c5fd;
+  --color-primary-600: #bfdbfe;
+  --color-primary-700: #dbeafe;
+  --color-primary-800: #eff6ff;
+  --color-primary-900: #f8fafc;
+}
+
+/* 系统偏好设置自动切换 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --theme-background: #0f0f0f;
+    --theme-surface: #1a1a1a;
+    --theme-surface-secondary: #2a2a2a;
+    --theme-text-primary: #ffffff;
+    --theme-text-secondary: #d1d5db;
+    --theme-text-muted: #9ca3af;
+    --theme-border: #404040;
+    --theme-border-light: #333333;
+    --theme-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    --theme-shadow-light: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* 主题过渡动画 */
+* {
+  transition: background-color var(--transition-fast), 
+              border-color var(--transition-fast), 
+              color var(--transition-fast),
+              box-shadow var(--transition-fast);
+}
+
+/* 主题相关的实用类 */
+.theme-bg { background-color: var(--theme-background); }
+.theme-surface { background-color: var(--theme-surface); }
+.theme-surface-secondary { background-color: var(--theme-surface-secondary); }
+.theme-text-primary { color: var(--theme-text-primary); }
+.theme-text-secondary { color: var(--theme-text-secondary); }
+.theme-text-muted { color: var(--theme-text-muted); }
+.theme-border { border-color: var(--theme-border); }
+.theme-shadow { box-shadow: var(--theme-shadow); }
+
+/* 高对比度模式支持 */
+@media (prefers-contrast: high) {
+  :root {
+    --theme-border: #000000;
+    --theme-text-secondary: var(--theme-text-primary);
+  }
+  
+  [data-theme="dark"] {
+    --theme-border: #ffffff;
+    --theme-text-secondary: var(--theme-text-primary);
+  }
+}
+
+/* 减少动画模式支持 */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

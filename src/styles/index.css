@@ -1,0 +1,20 @@
+/* 设计系统入口文件 */
+/* 按顺序导入所有样式文件，确保正确的层叠顺序 */
+
+/* 1. 设计令牌 - 定义所有设计变量 */
+@import './tokens.css';
+
+/* 2. 主题系统 - 定义主题变量和切换逻辑 */
+@import './themes.css';
+
+/* 3. 基础样式 - CSS重置和全局样式 */
+@import './base.css';
+
+/* 4. 组件样式 - 可复用的组件样式 */
+@import './components.css';
+
+/* 导出设计系统版本信息 */
+:root {
+  --design-system-version: '1.0.0';
+  --design-system-name: 'Wallet UI Design System';
+}
