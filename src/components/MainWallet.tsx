@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react"
 import { Button } from "./Button"
+import { SendETH } from "./SendETH"
 import { SEPOLIA_CONFIG } from "~config/networks"
 import { AccountService } from "~services/AccountService"
 import { NetworkService } from "~services/NetworkService"
+import { blockchainService } from "~services/BlockchainService"
 import type { WalletAccount } from "~types/wallet"
 
 interface MainWalletProps {
@@ -18,12 +20,17 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
   const [copySuccess, setCopySuccess] = useState<string>("")
   const [balance, setBalance] = useState<string>("")
   const [balanceLoading, setBalanceLoading] = useState<boolean>(true)
+  const [balanceError, setBalanceError] = useState<string>("")
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [autoRefresh, setAutoRefresh] = useState<boolean>(true)
   const [networkInfo, setNetworkInfo] = useState<{
     chainId: number
     blockNumber: number
     gasPrice: string
     isConnected: boolean
   } | null>(null)
+  const [showSendETH, setShowSendETH] = useState<boolean>(false)
+  const [lastTransactionHash, setLastTransactionHash] = useState<string>("")
 
   // 创建账户列表（目前只有一个账户）
   const accounts: WalletAccount[] = [
@@ -54,12 +61,28 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
     loadAccountData()
   }, [currentAccount.address])
 
+  // 自动刷新余额
+  useEffect(() => {
+    if (!autoRefresh) return
+
+    const interval = setInterval(() => {
+      if (!balanceLoading) {
+        loadAccountData()
+      }
+    }, 30000) // 每30秒刷新一次
+
+    return () => clearInterval(interval)
+  }, [autoRefresh, balanceLoading, currentAccount.address])
+
   // 组件卸载时清理敏感数据
   useEffect(() => {
     return () => {
       // 清理可能的敏感状态
       setCopySuccess('')
       setBalance('')
+      setBalanceError('')
+      setLastUpdated(null)
+      setAutoRefresh(false)
       setNetworkInfo(null)
     }
   }, [])
@@ -67,13 +90,20 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
   const loadAccountData = async () => {
     try {
       setBalanceLoading(true)
+      setBalanceError("")
+      
+      // 等待区块链服务初始化
+      await blockchainService.waitForInitialization()
+      
+      // 检查区块链服务连接状态
+      if (!blockchainService.isProviderConnected()) {
+        throw new Error("区块链服务未连接")
+      }
       
       // 并行加载余额和网络信息
       const [accountBalance, networkData] = await Promise.all([
-        NetworkService.getBalance(currentAccount.address).catch(error => {
-          console.error("余额查询失败:", error)
-          return "0"
-        }),
+        // 使用 BlockchainService 查询 ETH 余额
+        blockchainService.getETHBalance(currentAccount.address),
         NetworkService.getNetworkInfo().catch(error => {
           console.error("网络信息获取失败:", error)
           return {
@@ -87,9 +117,12 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
 
       setBalance(accountBalance)
       setNetworkInfo(networkData)
+      setLastUpdated(new Date())
+      console.log(`✅ ETH余额查询成功: ${accountBalance} ETH`)
     } catch (error) {
       console.error("加载账户数据失败:", error)
       setBalance("0")
+      setBalanceError(error.message || "余额查询失败")
     } finally {
       setBalanceLoading(false)
     }
@@ -97,6 +130,14 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
 
   const handleRefreshBalance = () => {
     loadAccountData()
+  }
+
+  const handleTransactionSent = (txHash: string) => {
+    setLastTransactionHash(txHash)
+    // 刷新余额
+    setTimeout(() => {
+      loadAccountData()
+    }, 2000) // 等待2秒后刷新余额
   }
 
   const handleTestNetwork = async () => {
@@ -216,11 +257,21 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
             </div>
 
             {/* 余额显示 */}
-            <div className="bg-blue-50 rounded-lg p-3">
+            <div className={`rounded-lg p-3 ${
+              balanceError ? 'bg-red-50 border border-red-200' : 'bg-blue-50'
+            }`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-sm text-blue-800 font-medium">余额</div>
-                  <div className="text-xs text-blue-600">Sepolia ETH</div>
+                  <div className={`text-sm font-medium ${
+                    balanceError ? 'text-red-800' : 'text-blue-800'
+                  }`}>
+                    ETH 余额
+                  </div>
+                  <div className={`text-xs ${
+                    balanceError ? 'text-red-600' : 'text-blue-600'
+                  }`}>
+                    Sepolia 测试网
+                  </div>
                 </div>
                 <div className="text-right">
                   {balanceLoading ? (
@@ -228,7 +279,14 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
                       <div className="text-lg font-bold text-blue-800">
                         <div className="animate-pulse bg-blue-200 h-6 w-16 rounded"></div>
                       </div>
-                      <div className="text-xs text-blue-600 mt-1">查询中...</div>
+                      <div className="text-xs text-blue-600 mt-1">🔄 查询中...</div>
+                    </div>
+                  ) : balanceError ? (
+                    <div>
+                      <div className="text-lg font-bold text-red-800">
+                        ❌ 错误
+                      </div>
+                      <div className="text-xs text-red-600 mt-1">查询失败</div>
                     </div>
                   ) : (
                     <div>
@@ -242,16 +300,58 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
                   )}
                 </div>
               </div>
+              
+              {/* 错误信息显示 */}
+              {balanceError && (
+                <div className="mt-2 pt-2 border-t border-red-200">
+                  <div className="text-xs text-red-700 bg-red-100 rounded p-2">
+                    ⚠️ {balanceError}
+                  </div>
+                </div>
+              )}
+              
+              {/* 最后更新时间和自动刷新状态 */}
+              {lastUpdated && !balanceLoading && !balanceError && (
+                <div className="mt-2 pt-2 border-t border-blue-200">
+                  <div className="flex items-center justify-between text-xs text-blue-600">
+                    <span>最后更新: {lastUpdated.toLocaleTimeString()}</span>
+                    <div className="flex items-center space-x-1">
+                      {autoRefresh && (
+                        <span className="flex items-center">
+                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse mr-1"></div>
+                          自动刷新
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {/* 刷新按钮 */}
-              <div className="mt-2 pt-2 border-t border-blue-200">
-                <Button
-                  onClick={handleRefreshBalance}
-                  variant="secondary"
-                  className="w-full text-xs py-1"
-                  disabled={balanceLoading}
-                >
-                  {balanceLoading ? "🔄 查询中..." : "🔄 刷新余额"}
-                </Button>
+              <div className={`mt-2 pt-2 border-t ${
+                balanceError ? 'border-red-200' : 'border-blue-200'
+              }`}>
+                <div className="flex space-x-2">
+                  <Button
+                    onClick={handleRefreshBalance}
+                    variant={balanceError ? "primary" : "secondary"}
+                    className="flex-1 text-xs py-2"
+                    disabled={balanceLoading}
+                  >
+                    {balanceLoading ? "🔄 查询中..." : balanceError ? "🔄 重试" : "🔄 手动刷新"}
+                  </Button>
+                  <Button
+                    onClick={() => setAutoRefresh(!autoRefresh)}
+                    variant="secondary"
+                    className="text-xs py-2 px-3"
+                    disabled={balanceLoading}
+                  >
+                    {autoRefresh ? "⏸️" : "▶️"}
+                  </Button>
+                </div>
+                <div className="text-xs text-gray-500 text-center mt-1">
+                  自动刷新: {autoRefresh ? "开启 (30秒)" : "关闭"}
+                </div>
               </div>
             </div>
 
@@ -290,16 +390,27 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
       <div className="space-y-3">
         <div className="text-sm font-medium text-gray-700 text-center">快捷操作</div>
         <div className="grid grid-cols-2 gap-3">
-          <Button className="text-sm py-3" disabled>
+          <Button 
+            className="text-sm py-3" 
+            onClick={() => setShowSendETH(true)}
+            disabled={!networkInfo?.isConnected || parseFloat(balance) === 0}
+          >
             💸 发送
           </Button>
           <Button variant="secondary" className="text-sm py-3" disabled>
             📥 接收
           </Button>
         </div>
-        <div className="text-xs text-gray-500 text-center">
-          交易功能即将在后续版本中实现
-        </div>
+        {parseFloat(balance) === 0 && (
+          <div className="text-xs text-amber-600 text-center">
+            ⚠️ 余额不足，无法发送交易
+          </div>
+        )}
+        {!networkInfo?.isConnected && (
+          <div className="text-xs text-red-600 text-center">
+            ❌ 网络未连接，无法发送交易
+          </div>
+        )}
       </div>
 
       {/* 钱包管理 */}
@@ -327,6 +438,37 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
         </div>
       </div>
 
+      {/* 最近交易 */}
+      {lastTransactionHash && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <div className="text-sm font-medium text-green-800 mb-2">✅ 最近交易</div>
+          <div className="space-y-2">
+            <div className="text-xs text-green-700">
+              交易哈希: {lastTransactionHash.slice(0, 10)}...{lastTransactionHash.slice(-8)}
+            </div>
+            <div className="flex space-x-2">
+              <Button
+                onClick={() => {
+                  const explorerLink = `${SEPOLIA_CONFIG.blockExplorerUrl}/tx/${lastTransactionHash}`
+                  window.open(explorerLink, '_blank')
+                }}
+                variant="secondary"
+                className="text-xs py-1 px-2"
+              >
+                🔍 查看详情
+              </Button>
+              <Button
+                onClick={() => setLastTransactionHash("")}
+                variant="secondary"
+                className="text-xs py-1 px-2"
+              >
+                ✕ 关闭
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 版本信息 */}
       <div className="text-center text-xs text-gray-400 border-t border-gray-100 pt-3">
         <div>Sepolia Wallet v0.1.0</div>
@@ -334,6 +476,21 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
           网络: {SEPOLIA_CONFIG.name} | 链 ID: {SEPOLIA_CONFIG.chainId}
         </div>
       </div>
+
+      {/* SendETH 组件 */}
+      {showSendETH && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <SendETH
+                currentAccount={currentAccount}
+                onClose={() => setShowSendETH(false)}
+                onTransactionSent={handleTransactionSent}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
