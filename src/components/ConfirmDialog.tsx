@@ -4,12 +4,15 @@ import { Button } from "./Button"
 interface ConfirmDialogProps {
   isOpen: boolean
   title: string
-  message: string
+  message: string | React.ReactNode
   confirmText?: string
   cancelText?: string
   onConfirm: () => void
   onCancel: () => void
+  onClose?: () => void
   type?: 'info' | 'warning' | 'danger'
+  confirmButtonVariant?: 'primary' | 'secondary' | 'danger'
+  isLoading?: boolean
 }
 
 export function ConfirmDialog({
@@ -20,7 +23,10 @@ export function ConfirmDialog({
   cancelText = "取消",
   onConfirm,
   onCancel,
-  type = 'info'
+  onClose,
+  type = 'info',
+  confirmButtonVariant,
+  isLoading = false
 }: ConfirmDialogProps) {
   if (!isOpen) return null
 
@@ -65,9 +71,9 @@ export function ConfirmDialog({
               <h3 className={`text-lg font-semibold ${styles.titleColor} mb-2`}>
                 {title}
               </h3>
-              <p className={`text-sm ${styles.messageColor}`}>
+              <div className={`text-sm ${styles.messageColor}`}>
                 {message}
-              </p>
+              </div>
             </div>
           </div>
         </div>
@@ -75,14 +81,16 @@ export function ConfirmDialog({
         <div className="p-6 theme-surface rounded-b-lg">
           <div className="flex space-x-3 justify-end">
             <Button
-              onClick={onCancel}
+              onClick={onClose || onCancel}
               variant="secondary"
+              disabled={isLoading}
             >
               {cancelText}
             </Button>
             <Button
               onClick={onConfirm}
-              variant={type === 'danger' ? 'danger' : 'primary'}
+              variant={confirmButtonVariant || (type === 'danger' ? 'danger' : 'primary')}
+              disabled={isLoading}
             >
               {confirmText}
             </Button>
