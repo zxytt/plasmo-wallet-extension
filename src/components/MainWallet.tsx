@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from "react"
 import { Button } from "./Button"
 import { SendETH } from "./SendETH"
+import { TransactionHistory } from "./TransactionHistory"
 import { SEPOLIA_CONFIG } from "~config/networks"
 import { AccountService } from "~services/AccountService"
 import { NetworkService } from "~services/NetworkService"
 import { blockchainService } from "~services/BlockchainService"
+import { transactionMonitorService } from "~services/TransactionMonitorService"
 import type { WalletAccount } from "~types/wallet"
 
 interface MainWalletProps {
@@ -30,7 +32,9 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
     isConnected: boolean
   } | null>(null)
   const [showSendETH, setShowSendETH] = useState<boolean>(false)
+  const [showTransactionHistory, setShowTransactionHistory] = useState<boolean>(false)
   const [lastTransactionHash, setLastTransactionHash] = useState<string>("")
+  const [pendingTransactionCount, setPendingTransactionCount] = useState<number>(0)
 
   // 创建账户列表（目前只有一个账户）
   const accounts: WalletAccount[] = [
@@ -59,7 +63,35 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
   // 加载余额和网络信息
   useEffect(() => {
     loadAccountData()
+    initializeTransactionMonitoring()
   }, [currentAccount.address])
+
+  // 初始化交易监控
+  const initializeTransactionMonitoring = () => {
+    // 启动交易监控
+    transactionMonitorService.startMonitoring(10000) // 每10秒检查一次
+
+    // 监听交易状态变化
+    transactionMonitorService.onTransactionStatusChange((transaction, oldStatus) => {
+      console.log(`交易状态变化: ${transaction.hash} ${oldStatus} -> ${transaction.status}`)
+      
+      // 更新待确认交易数量
+      updatePendingTransactionCount()
+    })
+
+    // 监听余额更新需要
+    transactionMonitorService.onBalanceUpdateNeeded((transaction) => {
+      console.log(`交易确认，需要更新余额: ${transaction.hash}`)
+      
+      // 延迟刷新余额，等待区块确认
+      setTimeout(() => {
+        loadAccountData()
+      }, 3000)
+    })
+
+    // 初始化待确认交易数量
+    updatePendingTransactionCount()
+  }
 
   // 自动刷新余额
   useEffect(() => {
@@ -77,6 +109,9 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
   // 组件卸载时清理敏感数据
   useEffect(() => {
     return () => {
+      // 停止交易监控
+      transactionMonitorService.stopMonitoring()
+      
       // 清理可能的敏感状态
       setCopySuccess('')
       setBalance('')
@@ -84,6 +119,7 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
       setLastUpdated(null)
       setAutoRefresh(false)
       setNetworkInfo(null)
+      setPendingTransactionCount(0)
     }
   }, [])
 
@@ -134,10 +170,29 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
 
   const handleTransactionSent = (txHash: string) => {
     setLastTransactionHash(txHash)
-    // 刷新余额
+    
+    // 更新待确认交易数量
+    updatePendingTransactionCount()
+    
+    // 刷新余额（延迟执行，等待交易广播）
     setTimeout(() => {
       loadAccountData()
-    }, 2000) // 等待2秒后刷新余额
+    }, 2000)
+  }
+
+  const updatePendingTransactionCount = async () => {
+    try {
+      const count = await transactionMonitorService.getPendingTransactionCount()
+      setPendingTransactionCount(count)
+    } catch (error) {
+      console.error('更新待确认交易数量失败:', error)
+    }
+  }
+
+  const handleRefreshTransactionHistory = () => {
+    // 刷新余额和待确认交易数量
+    loadAccountData()
+    updatePendingTransactionCount()
   }
 
   const handleTestNetwork = async () => {
@@ -389,7 +444,7 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
       {/* 快捷操作 */}
       <div className="space-y-3">
         <div className="text-sm font-medium text-gray-700 text-center">快捷操作</div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-2">
           <Button 
             className="text-sm py-3" 
             onClick={() => setShowSendETH(true)}
@@ -400,6 +455,18 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
           <Button variant="secondary" className="text-sm py-3" disabled>
             📥 接收
           </Button>
+          <Button 
+            variant="secondary" 
+            className="text-sm py-3 relative" 
+            onClick={() => setShowTransactionHistory(true)}
+          >
+            📜 历史
+            {pendingTransactionCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-yellow-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                {pendingTransactionCount}
+              </span>
+            )}
+          </Button>
         </div>
         {parseFloat(balance) === 0 && (
           <div className="text-xs text-amber-600 text-center">
@@ -409,6 +476,11 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
         {!networkInfo?.isConnected && (
           <div className="text-xs text-red-600 text-center">
             ❌ 网络未连接，无法发送交易
+          </div>
+        )}
+        {pendingTransactionCount > 0 && (
+          <div className="text-xs text-yellow-600 text-center">
+            ⏳ 有 {pendingTransactionCount} 笔交易待确认
           </div>
         )}
       </div>
@@ -486,6 +558,30 @@ export function MainWallet({ currentAccount, onLockWallet }: MainWalletProps) {
                 currentAccount={currentAccount}
                 onClose={() => setShowSendETH(false)}
                 onTransactionSent={handleTransactionSent}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TransactionHistory 组件 */}
+      {showTransactionHistory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold">交易历史</h3>
+                <Button
+                  onClick={() => setShowTransactionHistory(false)}
+                  variant="secondary"
+                  className="text-sm px-3 py-1"
+                >
+                  ✕ 关闭
+                </Button>
+              </div>
+              <TransactionHistory
+                currentAddress={currentAccount.address}
+                onRefresh={handleRefreshTransactionHistory}
               />
             </div>
           </div>
