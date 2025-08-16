@@ -2,10 +2,13 @@ import React, { useState, useEffect } from "react"
 import { ethers } from "ethers"
 import { Button } from "./Button"
 import { Input } from "./Input"
-import { ConfirmDialog } from "./ConfirmDialog"
+import { TransactionConfirmDialog } from "./TransactionConfirmDialog"
+import { TransactionStatus } from "./TransactionStatus"
+import { GasFeeSelector, type GasSpeed } from "./GasFeeSelector"
 import { blockchainService } from "~services/BlockchainService"
-import { BlockchainError, BlockchainErrorType } from "~types/blockchain"
-import type { TransactionRequest, GasPriceData } from "~types/blockchain"
+import { transactionService } from "~services/TransactionService"
+import { BlockchainError } from "~types/blockchain"
+import type { TransactionRequest } from "~types/blockchain"
 
 interface SendETHProps {
   currentAccount: {
@@ -34,9 +37,8 @@ interface TransactionPreview {
 export function SendETH({ currentAccount, onClose, onTransactionSent }: SendETHProps) {
   const [recipientAddress, setRecipientAddress] = useState("")
   const [amount, setAmount] = useState("")
-  const [gasSpeed, setGasSpeed] = useState<'slow' | 'standard' | 'fast'>('standard')
-  const [customGasPrice, setCustomGasPrice] = useState("")
-  const [useCustomGas, setUseCustomGas] = useState(false)
+  const [gasSpeed, setGasSpeed] = useState<GasSpeed>('standard')
+  const [gasInfo, setGasInfo] = useState<{ gasLimit: string; gasPrice: string } | null>(null)
   
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({})
   const [isValidating, setIsValidating] = useState(false)
@@ -44,9 +46,10 @@ export function SendETH({ currentAccount, onClose, onTransactionSent }: SendETHP
   const [isSending, setIsSending] = useState(false)
   
   const [currentBalance, setCurrentBalance] = useState("")
-  const [gasPrices, setGasPrices] = useState<GasPriceData | null>(null)
   const [transactionPreview, setTransactionPreview] = useState<TransactionPreview | null>(null)
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [showTransactionStatus, setShowTransactionStatus] = useState(false)
+  const [sentTxHash, setSentTxHash] = useState<string | null>(null)
 
   // 加载初始数据
   useEffect(() => {
@@ -60,23 +63,17 @@ export function SendETH({ currentAccount, onClose, onTransactionSent }: SendETHP
     }
   }, [recipientAddress, amount, currentBalance])
 
-  // 当 gas 设置改变时重新构建交易
+  // 当 gas 信息更新时重新构建交易预览
   useEffect(() => {
-    if (transactionPreview && !validationErrors.address && !validationErrors.amount) {
-      buildTransaction()
+    if (gasInfo && recipientAddress && amount && !validationErrors.address && !validationErrors.amount) {
+      updateTransactionPreview()
     }
-  }, [gasSpeed, customGasPrice, useCustomGas])
+  }, [gasInfo])
 
   const loadInitialData = async () => {
     try {
-      // 并行加载余额和 gas 价格
-      const [balance, gasData] = await Promise.all([
-        blockchainService.getETHBalance(currentAccount.address),
-        blockchainService.getGasPrices()
-      ])
-      
+      const balance = await blockchainService.getETHBalance(currentAccount.address)
       setCurrentBalance(balance)
-      setGasPrices(gasData)
     } catch (error) {
       console.error("加载初始数据失败:", error)
       setValidationErrors({ general: "加载数据失败，请重试" })
@@ -131,32 +128,44 @@ export function SendETH({ currentAccount, onClose, onTransactionSent }: SendETHP
   }
 
   const buildTransaction = async () => {
-    if (!recipientAddress || !amount || !gasPrices) return
+    if (!recipientAddress || !amount) return
 
     setIsBuilding(true)
     try {
-      // 构建基础交易
+      // 构建基础交易用于Gas估算
       const transaction: TransactionRequest = {
         to: recipientAddress,
         value: ethers.parseEther(amount).toString()
       }
 
-      // 设置 gas 价格
-      let gasPrice: string
-      if (useCustomGas && customGasPrice) {
-        gasPrice = ethers.parseUnits(customGasPrice, 'gwei').toString()
-      } else {
-        const gasPriceGwei = gasPrices[gasSpeed]
-        gasPrice = ethers.parseUnits(gasPriceGwei, 'gwei').toString()
-      }
-      transaction.gasPrice = gasPrice
+      // 触发Gas费用选择器更新
+      // 实际的交易构建会在Gas信息更新后通过updateTransactionPreview完成
+      setTransactionPreview(null)
 
-      // 估算 gas 限制
-      const gasLimit = await blockchainService.estimateGas(transaction)
-      transaction.gasLimit = gasLimit.toString()
+    } catch (error) {
+      console.error("构建交易失败:", error)
+      setValidationErrors({ general: "构建交易失败，请重试" })
+      setTransactionPreview(null)
+    } finally {
+      setIsBuilding(false)
+    }
+  }
+
+  const updateTransactionPreview = async () => {
+    if (!recipientAddress || !amount || !gasInfo) return
+
+    try {
+      // 构建完整交易
+      const gasPrice = ethers.parseUnits(gasInfo.gasPrice, 'gwei')
+      const transaction: TransactionRequest = {
+        to: recipientAddress,
+        value: ethers.parseEther(amount).toString(),
+        gasLimit: gasInfo.gasLimit,
+        gasPrice: gasPrice.toString()
+      }
 
       // 计算总费用
-      const gasCost = gasLimit * BigInt(gasPrice)
+      const gasCost = BigInt(gasInfo.gasLimit) * gasPrice
       const totalAmount = ethers.parseEther(amount) + gasCost
       const totalCost = ethers.formatEther(totalAmount)
 
@@ -172,29 +181,25 @@ export function SendETH({ currentAccount, onClose, onTransactionSent }: SendETHP
         }
       }
 
+      // 清除余额不足错误（如果之前有的话）
+      if (validationErrors.amount?.includes('余额不足支付交易费用')) {
+        const newErrors = { ...validationErrors }
+        delete newErrors.amount
+        setValidationErrors(newErrors)
+      }
+
       setTransactionPreview({
         to: recipientAddress,
         amount,
-        gasLimit: gasLimit.toString(),
-        gasPrice: ethers.formatUnits(gasPrice, 'gwei'),
+        gasLimit: gasInfo.gasLimit,
+        gasPrice: gasInfo.gasPrice,
         totalCost,
         transaction
       })
 
     } catch (error) {
-      console.error("构建交易失败:", error)
-      if (error instanceof BlockchainError) {
-        if (error.type === BlockchainErrorType.GAS_ESTIMATION_FAILED) {
-          setValidationErrors({ general: "Gas 费用估算失败，请检查交易参数" })
-        } else {
-          setValidationErrors({ general: error.message })
-        }
-      } else {
-        setValidationErrors({ general: "构建交易失败，请重试" })
-      }
+      console.error("更新交易预览失败:", error)
       setTransactionPreview(null)
-    } finally {
-      setIsBuilding(false)
     }
   }
 
@@ -203,23 +208,35 @@ export function SendETH({ currentAccount, onClose, onTransactionSent }: SendETHP
 
     setIsSending(true)
     try {
-      // 创建钱包实例
-      const provider = blockchainService.getCurrentProvider()
-      const wallet = new ethers.Wallet(currentAccount.privateKey, provider)
-
-      // 发送交易
-      const txResponse = await wallet.sendTransaction(transactionPreview.transaction)
+      console.log('开始发送交易...')
       
-      console.log("交易已发送:", txResponse.hash)
+      // 使用 TransactionService 签名并发送交易
+      const txHash = await transactionService.signAndSendTransaction(
+        transactionPreview.transaction,
+        currentAccount.privateKey
+      )
+      
+      console.log("交易已发送:", txHash)
+      
+      // 保存交易哈希并显示状态页面
+      setSentTxHash(txHash)
+      setShowConfirmDialog(false)
+      setShowTransactionStatus(true)
       
       // 通知父组件
       if (onTransactionSent) {
-        onTransactionSent(txResponse.hash)
+        onTransactionSent(txHash)
       }
 
-      // 关闭对话框
-      setShowConfirmDialog(false)
-      onClose()
+      // 开始跟踪交易状态
+      transactionService.waitForTransaction(txHash).then((record) => {
+        if (record) {
+          console.log('交易确认完成:', record)
+          // 可以在这里更新余额或发送通知
+        }
+      }).catch((error) => {
+        console.error('交易确认失败:', error)
+      })
 
     } catch (error) {
       console.error("发送交易失败:", error)
@@ -241,6 +258,20 @@ export function SendETH({ currentAccount, onClose, onTransactionSent }: SendETHP
   }
 
   const canProceed = !isValidating && !isBuilding && transactionPreview && Object.keys(validationErrors).length === 0
+
+  // 如果显示交易状态，渲染交易状态组件
+  if (showTransactionStatus && sentTxHash) {
+    return (
+      <TransactionStatus
+        txHash={sentTxHash}
+        onClose={() => {
+          setShowTransactionStatus(false)
+          setSentTxHash(null)
+          onClose()
+        }}
+      />
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -314,108 +345,82 @@ export function SendETH({ currentAccount, onClose, onTransactionSent }: SendETHP
         </div>
       </div>
 
-      {/* Gas 费用设置 */}
-      {gasPrices && (
-        <div className="space-y-3">
-          <label className="block text-sm font-medium text-gray-700">
-            Gas 费用设置
-          </label>
-          
-          {/* Gas 速度选择 */}
-          <div className="grid grid-cols-3 gap-2">
-            {(['slow', 'standard', 'fast'] as const).map((speed) => (
-              <button
-                key={speed}
-                type="button"
-                onClick={() => {
-                  setGasSpeed(speed)
-                  setUseCustomGas(false)
-                }}
-                className={`p-3 rounded-lg border text-sm ${
-                  gasSpeed === speed && !useCustomGas
-                    ? 'border-blue-500 bg-blue-50 text-blue-800'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="font-medium capitalize">
-                  {speed === 'slow' ? '慢速' : speed === 'standard' ? '标准' : '快速'}
-                </div>
-                <div className="text-xs text-gray-600 mt-1">
-                  {gasPrices[speed]} Gwei
-                </div>
-                <div className="text-xs text-gray-500">
-                  ~{gasPrices.estimatedTime[speed]}秒
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {/* 自定义 Gas 价格 */}
-          <div className="space-y-2">
-            <label className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={useCustomGas}
-                onChange={(e) => setUseCustomGas(e.target.checked)}
-                className="rounded"
-              />
-              <span className="text-sm text-gray-700">自定义 Gas 价格</span>
-            </label>
-            
-            {useCustomGas && (
-              <Input
-                type="number"
-                placeholder="Gas 价格 (Gwei)"
-                value={customGasPrice}
-                onChange={(value) => setCustomGasPrice(value)}
-              />
-            )}
-          </div>
-        </div>
+      {/* Gas 费用选择 */}
+      {recipientAddress && amount && !validationErrors.address && !validationErrors.amount && (
+        <GasFeeSelector
+          transaction={{
+            to: recipientAddress,
+            value: ethers.parseEther(amount).toString()
+          }}
+          selectedSpeed={gasSpeed}
+          onSpeedChange={setGasSpeed}
+          onGasInfoUpdate={setGasInfo}
+        />
       )}
 
       {/* 交易预览 */}
       {transactionPreview && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-          <div className="font-medium text-gray-800">交易预览</div>
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4 space-y-3">
+          <div className="flex items-center space-x-2">
+            <div className="text-blue-600">📋</div>
+            <div className="font-medium text-blue-900">交易预览</div>
+          </div>
           
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-gray-600">接收地址:</span>
-              <span className="font-mono text-gray-800">
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-700">接收地址:</span>
+              <span className="font-mono text-gray-900 bg-white px-2 py-1 rounded text-xs">
                 {transactionPreview.to.slice(0, 6)}...{transactionPreview.to.slice(-4)}
               </span>
             </div>
             
-            <div className="flex justify-between">
-              <span className="text-gray-600">转账金额:</span>
-              <span className="font-bold text-gray-800">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-700">转账金额:</span>
+              <span className="font-bold text-lg text-gray-900">
                 {transactionPreview.amount} ETH
               </span>
             </div>
             
-            <div className="flex justify-between">
-              <span className="text-gray-600">Gas 费用:</span>
-              <span className="text-gray-800">
-                {ethers.formatEther(
-                  BigInt(transactionPreview.gasLimit) * BigInt(ethers.parseUnits(transactionPreview.gasPrice, 'gwei'))
-                )} ETH
-              </span>
-            </div>
-            
-            <div className="flex justify-between">
-              <span className="text-gray-600">Gas 价格:</span>
-              <span className="text-gray-800">
-                {transactionPreview.gasPrice} Gwei
-              </span>
-            </div>
-            
-            <div className="border-t border-gray-300 pt-2">
-              <div className="flex justify-between font-bold">
-                <span className="text-gray-800">总费用:</span>
-                <span className="text-gray-900">
-                  {parseFloat(transactionPreview.totalCost).toFixed(6)} ETH
+            <div className="bg-white rounded-lg p-3 space-y-2">
+              <div className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+                Gas 费用详情
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-gray-600">Gas 限制:</span>
+                <span className="text-gray-800 font-mono">
+                  {parseInt(transactionPreview.gasLimit).toLocaleString()}
                 </span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-gray-600">Gas 价格:</span>
+                <span className="text-gray-800">
+                  {parseFloat(transactionPreview.gasPrice).toFixed(1)} Gwei
+                </span>
+              </div>
+              
+              <div className="flex justify-between">
+                <span className="text-gray-600">Gas 费用:</span>
+                <span className="text-gray-800 font-medium">
+                  {ethers.formatEther(
+                    BigInt(transactionPreview.gasLimit) * BigInt(ethers.parseUnits(transactionPreview.gasPrice, 'gwei'))
+                  ).slice(0, 8)} ETH
+                </span>
+              </div>
+            </div>
+            
+            <div className="border-t border-blue-200 pt-3">
+              <div className="flex justify-between items-center">
+                <span className="text-gray-700 font-medium">总费用:</span>
+                <div className="text-right">
+                  <div className="text-xl font-bold text-gray-900">
+                    {parseFloat(transactionPreview.totalCost).toFixed(6)} ETH
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    转账 + Gas 费用
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -451,40 +456,18 @@ export function SendETH({ currentAccount, onClose, onTransactionSent }: SendETHP
         </Button>
       </div>
 
-      {/* 确认对话框 */}
+      {/* 交易确认对话框 */}
       {showConfirmDialog && transactionPreview && (
-        <ConfirmDialog
+        <TransactionConfirmDialog
           isOpen={showConfirmDialog}
-          onClose={() => setShowConfirmDialog(false)}
+          transaction={transactionPreview.transaction}
+          fromAddress={currentAccount.address}
+          amount={transactionPreview.amount}
+          gasLimit={transactionPreview.gasLimit}
+          gasPrice={transactionPreview.gasPrice}
+          totalCost={transactionPreview.totalCost}
           onConfirm={handleSendTransaction}
-          title="确认发送交易"
-          message={
-            <div className="space-y-3">
-              <p>请确认以下交易信息:</p>
-              
-              <div className="bg-gray-50 rounded-lg p-3 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span>接收地址:</span>
-                  <span className="font-mono">{transactionPreview.to}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>转账金额:</span>
-                  <span className="font-bold">{transactionPreview.amount} ETH</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>总费用:</span>
-                  <span className="font-bold">{parseFloat(transactionPreview.totalCost).toFixed(6)} ETH</span>
-                </div>
-              </div>
-              
-              <p className="text-red-600 text-sm">
-                ⚠️ 交易一旦发送将无法撤销，请仔细核对信息。
-              </p>
-            </div>
-          }
-          confirmText={isSending ? "发送中..." : "确认发送"}
-          cancelText="取消"
-          confirmButtonVariant="primary"
+          onCancel={() => setShowConfirmDialog(false)}
           isLoading={isSending}
         />
       )}
