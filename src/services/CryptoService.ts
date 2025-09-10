@@ -56,7 +56,7 @@ export class CryptoService {
 		passphrase?: string,
 		index: number = 0
 	): string {
-		try {
+		// try {
 			console.log('开始派生私钥，助记词长度:', mnemonic.split(' ').length)
 
 			// 检查 ethers 是否正确导入
@@ -86,12 +86,12 @@ export class CryptoService {
 			console.log('私钥派生成功，地址:', derivedWallet.address)
 
 			return derivedWallet.privateKey
-		} catch (error) {
-			console.error('派生私钥失败:', error)
-			console.error('助记词:', mnemonic)
-			console.error('错误详情:', error)
-			throw new Error('私钥派生失败: ' + error.message)
-		}
+		// } catch (error) {
+		// 	console.error('派生私钥失败:', error)
+		// 	console.error('助记词:', mnemonic)
+		// 	console.error('错误详情:', error)
+		// 	throw new Error('私钥派生失败: ' + error.message)
+		// }
 	}
 
 	/**

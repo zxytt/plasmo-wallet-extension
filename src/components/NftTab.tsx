@@ -103,7 +103,7 @@ export const NftTab: React.FC<NFTViewerProps> = ({
 			setError(null)
 
 			// 在实际应用中，这里会调用 NFT API 或智能合约
-			const res = await blockchainService.getNfts(walletAddress)
+			// const res = await blockchainService.getNfts(walletAddress)
 			// 目前使用模拟数据
 			await new Promise((resolve) => setTimeout(resolve, 1000))
 
@@ -172,8 +172,7 @@ export const NftTab: React.FC<NFTViewerProps> = ({
 					<Button
 						onClick={loadCustomContract}
 						disabled={isLoading || !customContract.trim()}>
-						{isLoading ? <LoadingSpinner size="small" /> : '🔍'}{' '}
-						搜索
+						{isLoading ? <LoadingSpinner size="small" /> : '🔍搜索'}
 					</Button>
 				</div>
 			</Card>
@@ -187,8 +186,7 @@ export const NftTab: React.FC<NFTViewerProps> = ({
 						disabled={isLoading}
 						variant="secondary"
 						size="sm">
-						{isLoading ? <LoadingSpinner size="small" /> : '🔄'}{' '}
-						刷新
+						{isLoading ? <LoadingSpinner size="small" /> : '🔄刷新'}
 					</Button>
 				</div>
 
@@ -202,39 +200,21 @@ export const NftTab: React.FC<NFTViewerProps> = ({
 				) : (
 					<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 						{collections.map((collection) => (
-							<button
-								key={collection.contractAddress}
-								onClick={() =>
-									loadNFTsFromContract(
-										collection.contractAddress
-									)
-								}
-								className={`p-4 rounded-lg border-2 text-left transition-all ${
-									selectedCollection ===
-									collection.contractAddress
-										? 'border-blue-500 bg-blue-50'
-										: 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-								}`}>
-								<div className="flex items-center space-x-3">
-									<div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-400 rounded-lg flex items-center justify-center text-white font-bold">
-										{collection.symbol.charAt(0)}
-									</div>
-									<div className="flex-1">
-										<h4 className="font-medium text-gray-900">
-											{collection.name}
-										</h4>
-										<p className="text-sm text-gray-500">
-											{collection.symbol} •{' '}
-											{collection.totalSupply} 个
-										</p>
-										<p className="text-xs text-gray-400">
-											{formatAddress(
-												collection.contractAddress
-											)}
-										</p>
-									</div>
+							<div className="flex items-center space-x-3">
+								<div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-pink-400 rounded-lg flex items-center justify-center text-white font-bold">
+									{collection.symbol.charAt(0)}
 								</div>
-							</button>
+								<div className="flex-1">
+									<h4 className="font-medium text-gray-900">
+										{collection.name}
+									</h4>
+									<p className="text-xs text-gray-400">
+										{formatAddress(
+											collection.contractAddress
+										)}
+									</p>
+								</div>
+							</div>
 						))}
 					</div>
 				)}

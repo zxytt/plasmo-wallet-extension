@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 
 import { SEPOLIA_CONFIG } from '~config/networks'
 import { AccountService } from '~services/AccountService'
+import { StorageService } from '~services/StorageService'
+import { CryptoService } from '~services/CryptoService'
 import { blockchainService } from '~services/BlockchainService'
 import { NetworkService } from '~services/NetworkService'
 import { transactionMonitorService } from '~services/TransactionMonitorService'
@@ -10,6 +12,7 @@ import type { WalletAccount } from '~types/wallet'
 import { Button } from './Button'
 import { SendETH } from './SendETH'
 import { TransactionHistory } from './TransactionHistory'
+
 
 interface MainWalletProps {
 	currentNetwork: string
@@ -39,6 +42,8 @@ export function MainWallet({
 		blockExplorerUrl: string
 		uint: string
 	} | null>(null)
+  const [showAccounts, setShowAccounts] =
+		useState<boolean>(false)
 	const [showSendETH, setShowSendETH] = useState<boolean>(false)
 	const [showTransactionHistory, setShowTransactionHistory] =
 		useState<boolean>(false)
@@ -47,14 +52,13 @@ export function MainWallet({
 		useState<number>(0)
 
 	// 创建账户列表（目前只有一个账户）
-	const accounts: WalletAccount[] = [
-		{
-			address: currentAccount.address,
-			name: '账户 1',
-			index: 0,
-			createdAt: new Date()
-		}
-	]
+  const [accounts, setAccounts] = useState<WalletAccount[]>([])
+  const [selectedAccount, setSelectedAccount] = useState<WalletAccount | null>({
+		address: currentAccount.address,
+		name: '账户 1',
+		index: 0,
+		createdAt: new Date()
+	})
 
 	const handleCopyAddress = async (address: string) => {
 		const success = await AccountService.copyAddressToClipboard(address)
@@ -70,10 +74,18 @@ export function MainWallet({
 		return AccountService.formatAddress(address)
 	}
 
+  const initAccounts = async () => {
+    const storedAccounts = await StorageService.getItem<WalletAccount[]>(this.ACCOUNTS_STORAGE_KEY)
+    if (storedAccounts) {
+      setAccounts(storedAccounts)
+    }
+  }
+
 	// 加载余额和网络信息
 	useEffect(() => {
 		loadAccountData()
 		initializeTransactionMonitoring()
+    initAccounts()
 	}, [currentAccount.address, currentNetwork])
 
 	// 初始化交易监控
@@ -212,37 +224,53 @@ export function MainWallet({
 		updatePendingTransactionCount()
 	}
 
+  const addNewAccount = async () => {
+    const mnemonic = AccountService.getMnemonic()
+    const accountIndex = AccountService.getAccountIndex()
+    const privateKey = CryptoService.derivePrivateKeyFromMnemonic(mnemonic, '', accountIndex + 1)
+    const address = CryptoService.privateKeyToAddress(privateKey)
+    const newAccount = await AccountService.createAccountFromData(address, privateKey)
+    setAccounts([...accounts, newAccount])
+  }
+
 	return (
 		<div className="space-y-6">
 			{/* 账户列表 */}
 			<div className="space-y-4">
-				{accounts.map((account, index) => (
 					<div
-						key={account.address}
 						className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
 						{/* 账户名称和索引 */}
 						<div className="flex items-center justify-between">
 							<div className="flex items-center space-x-2">
 								<div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
 									<span className="text-blue-600 font-medium text-sm">
-										{index + 1}
+										{selectedAccount.index + 1}
 									</span>
 								</div>
 								<div>
 									<div className="font-medium text-gray-800 pl-3">
-										{account.name}
+										{selectedAccount.name}
+                    <Button
+											onClick={() =>
+												setShowAccounts(true)
+											}
+											size="sm"
+											variant="ghost"
+											className="text-sm">
+											+
+										</Button>
 									</div>
 									<div className="text-xs text-gray-500">
 										<Button
 											onClick={() =>
 												handleCopyAddress(
-													account.address
+													selectedAccount.address
 												)
 											}
 											size="sm"
 											variant="ghost"
 											className="text-sm">
-											{formatAddress(account.address)}📋
+											{formatAddress(selectedAccount.address)}📋
 										</Button>
 									</div>
 								</div>
@@ -252,7 +280,7 @@ export function MainWallet({
 									onClick={() => {
 										const explorerLink =
 											AccountService.getExplorerLink(
-												account.address,
+												selectedAccount.address,
 												networkInfo?.blockExplorerUrl
 											)
 										window.open(explorerLink, '_blank')
@@ -296,9 +324,9 @@ export function MainWallet({
 											<div className="text-lg font-bold text-blue-800">
 												<div className="animate-pulse bg-blue-200 h-6 w-16 rounded"></div>
 											</div>
-											<div className="text-xs text-blue-600 mt-1">
+											{/* <div className="text-xs text-blue-600 mt-1">
 												🔄 查询中...
-											</div>
+											</div> */}
 										</div>
 									) : balanceError ? (
 										<div>
@@ -393,7 +421,6 @@ export function MainWallet({
 							</div> */}
 						</div>
 					</div>
-				))}
 			</div>
 
 			{/* 复制成功提示 */}
@@ -449,6 +476,56 @@ export function MainWallet({
 					</div>
 				)}
 			</div>
+
+			{/* 切换账户 */}
+      {showAccounts && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+					<div className="bg-white rounded-lg max-w-md w-full h-[50vh]">
+            <div className="space-y-4 h-[42vh] overflow-y-auto">
+              {accounts.map((account, index) => (
+                <div
+                  key={account.address}
+                  className="bg-white border border-gray-200 rounded-lg p-4 space-y-3 cursor-pointer"
+                  onClick={() => setSelectedAccount(account)}
+                >
+                  {/* 账户名称和索引 */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span className="text-blue-600 font-medium text-sm">
+                          {index + 1}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="font-medium text-gray-800 pl-3">
+                          {account.name}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                            {account.address}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>  
+            <div className="flex space-x-2">
+              <Button
+                onClick={() => addNewAccount()}
+                variant="secondary"
+                className="w-full text-sm">
+                + 新增账户
+              </Button> 
+              <Button
+                onClick={() => setShowAccounts(false)}
+                variant="secondary"
+                className="w-full text-sm">
+                关闭
+              </Button> 
+            </div>     
+          </div>
+        </div>
+			)}
 
 			{/* 最近交易 */}
 			{lastTransactionHash && (

@@ -12,6 +12,7 @@ import { WalletTabs } from '~components/WalletTabs'
 import { CryptoService } from '~services/CryptoService'
 import { SecurityService } from '~services/SecurityService'
 import { StorageService } from '~services/StorageService'
+import { AccountService } from '~services/AccountService'
 import { initTheme } from '~utils/theme'
 
 import '~style.css'
@@ -163,6 +164,7 @@ function IndexPopup() {
 			console.log('开始生成地址...')
 			const address = CryptoService.privateKeyToAddress(privateKey)
 			console.log('地址生成成功:', address)
+			AccountService.createAccountFromData(address, privateKey, mnemonic)
 			setDerivedAddress(address)
 
 			// 切换到助记词显示界面

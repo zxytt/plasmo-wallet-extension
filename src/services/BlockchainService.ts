@@ -339,19 +339,26 @@ export class BlockchainService {
 		if (!apiKey) throw new Error('Alchemy API key not configured')
 		if (!network) throw new Error('Unsupported network')
 
-		const url = `https://${network}.g.alchemy.com/nft/v3/${apiKey}/getNFTs`
+		// const url = `https://${network}.g.alchemy.com/nft/v3/${apiKey}/getNFTs`
 
 		try {
 			const response = await fetch(
-				`${url}?owner=${address}&withMetadata=true&pageSize=100`
-			)
+			`https://api.chainbase.online/v1/account/nfts?chain_id=11155111&address=${address}&page=1&limit=100`,
+				{
+					method: 'GET',
+					headers: {
+						'accept': 'application/json',
+						'x-api-key': '32Vheule5iRuLab4mBJhBnmctWi'
+					}
+				}
+			);
 			const data = await response.json()
 
 			if (data.error) {
 				throw new Error(data.error.message)
 			}
 
-			return data.ownedNfts.map(nftToStandardFormat)
+			return (data && data.ownedNfts.map(nftToStandardFormat)) || []
 		} catch (err) {
 			console.error('Failed to fetch NFTs:', err)
 			throw err
