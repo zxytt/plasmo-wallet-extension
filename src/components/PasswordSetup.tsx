@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from "react"
-import { Button } from "./Button"
-import { PasswordStrengthIndicator } from "./PasswordStrengthIndicator"
+import React, { useEffect, useState } from "react"
+
 import { CryptoService } from "~services/CryptoService"
 import { SecurityService } from "~services/SecurityService"
+
+import { Button } from "./Button"
+import { PasswordStrengthIndicator } from "./PasswordStrengthIndicator"
 
 interface PasswordSetupProps {
   onPasswordSet: (password: string) => void
@@ -10,13 +12,13 @@ interface PasswordSetupProps {
 }
 
 export function PasswordSetup({ onPasswordSet, onBack }: PasswordSetupProps) {
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [passwordStrength, setPasswordStrength] = useState<{ 
-    isValid: boolean; 
-    message: string; 
-    score: number;
-    requirements: {
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [passwordStrength, setPasswordStrength] = useState<{
+    isValid: boolean
+    message: string
+    score?: number
+    requirements?: {
       length: boolean
       hasLower: boolean
       hasUpper: boolean
@@ -38,22 +40,22 @@ export function PasswordSetup({ onPasswordSet, onBack }: PasswordSetupProps) {
 
   const handleSubmit = () => {
     if (!password) {
-      alert('请输入密码')
+      alert("请输入密码")
       return
     }
 
     if (!passwordStrength?.isValid) {
-      alert(passwordStrength?.message || '密码不符合要求')
+      alert(passwordStrength?.message || "密码不符合要求")
       return
     }
 
     if (password !== confirmPassword) {
-      alert('两次输入的密码不一致')
+      alert("两次输入的密码不一致")
       return
     }
 
     onPasswordSet(password)
-    
+
     // 清理敏感数据
     clearSensitiveData()
   }
@@ -63,12 +65,12 @@ export function PasswordSetup({ onPasswordSet, onBack }: PasswordSetupProps) {
     // 安全清理密码
     SecurityService.clearPassword(password)
     SecurityService.clearPassword(confirmPassword)
-    
-    setPassword('')
-    setConfirmPassword('')
+
+    setPassword("")
+    setConfirmPassword("")
     setPasswordStrength(null)
-    
-    console.log('PasswordSetup: 敏感数据已清理')
+
+    console.log("PasswordSetup: 敏感数据已清理")
   }
 
   // 组件卸载时清理敏感数据
@@ -78,16 +80,12 @@ export function PasswordSetup({ onPasswordSet, onBack }: PasswordSetupProps) {
     }
   }, [])
 
-
-
   return (
     <div className="space-y-6">
       <div className="text-center">
         <div className="text-4xl mb-3">🔐</div>
         <h2 className="text-2xl font-bold text-gray-800">设置钱包密码</h2>
-        <p className="text-gray-600 mt-2">
-          密码将用于保护您的助记词和私钥
-        </p>
+        <p className="text-gray-600 mt-2">密码将用于保护您的助记词和私钥</p>
       </div>
 
       {/* 密码要求说明 */}
@@ -123,16 +121,15 @@ export function PasswordSetup({ onPasswordSet, onBack }: PasswordSetupProps) {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-            >
-              {showPassword ? '🙈' : '👁️'}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700">
+              {showPassword ? "🙈" : "👁️"}
             </button>
           </div>
         </div>
 
         {/* 密码强度指示器 */}
-        <PasswordStrengthIndicator 
-          strength={passwordStrength} 
+        <PasswordStrengthIndicator
+          strength={passwordStrength}
           password={password}
         />
 
@@ -152,8 +149,9 @@ export function PasswordSetup({ onPasswordSet, onBack }: PasswordSetupProps) {
 
         {/* 密码匹配提示 */}
         {confirmPassword && (
-          <div className={`text-sm ${password === confirmPassword ? 'text-green-600' : 'text-red-600'}`}>
-            {password === confirmPassword ? '✅ 密码匹配' : '❌ 密码不匹配'}
+          <div
+            className={`text-sm ${password === confirmPassword ? "text-green-600" : "text-red-600"}`}>
+            {password === confirmPassword ? "✅ 密码匹配" : "❌ 密码不匹配"}
           </div>
         )}
       </div>
@@ -163,8 +161,7 @@ export function PasswordSetup({ onPasswordSet, onBack }: PasswordSetupProps) {
         <Button
           onClick={handleSubmit}
           disabled={!passwordStrength?.isValid || password !== confirmPassword}
-          className="w-full"
-        >
+          className="w-full">
           设置密码并保存钱包
         </Button>
         {onBack && (

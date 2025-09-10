@@ -1,8 +1,8 @@
-import cssText from "data-text:~style.css"
-import type { PlasmoCSConfig } from "plasmo"
+import cssText from 'data-text:~style.css'
+import type { PlasmoCSConfig } from 'plasmo'
 
 export const config: PlasmoCSConfig = {
-  matches: ["<all_urls>"]
+	matches: ['<all_urls>']
 }
 
 /**
@@ -18,31 +18,31 @@ export const config: PlasmoCSConfig = {
  *    regardless of the host page's font size.
  */
 export const getStyle = (): HTMLStyleElement => {
-  const baseFontSize = 16
+	const baseFontSize = 16
 
-  let updatedCssText = cssText.replaceAll(":root", ":host(plasmo-csui)")
-  const remRegex = /([\d.]+)rem/g
-  updatedCssText = updatedCssText.replace(remRegex, (match, remValue) => {
-    const pixelsValue = parseFloat(remValue) * baseFontSize
+	let updatedCssText = cssText.replaceAll(':root', ':host(plasmo-csui)')
+	const remRegex = /([\d.]+)rem/g
+	updatedCssText = updatedCssText.replace(remRegex, (match, remValue) => {
+		const pixelsValue = parseFloat(remValue) * baseFontSize
 
-    return `${pixelsValue}px`
-  })
+		return `${pixelsValue}px`
+	})
 
-  const styleElement = document.createElement("style")
+	const styleElement = document.createElement('style')
 
-  styleElement.textContent = updatedCssText
+	styleElement.textContent = updatedCssText
 
-  return styleElement
+	return styleElement
 }
 
 const PlasmoOverlay = () => {
-  return (
-    <div className="plasmo-z-50 plasmo-flex plasmo-fixed plasmo-top-32 plasmo-right-8">
-      <div className="plasmo-bg-blue-600 plasmo-text-white plasmo-px-3 plasmo-py-2 plasmo-rounded-lg plasmo-text-sm">
-        Wallet Extension Active
-      </div>
-    </div>
-  )
+	return (
+		<div className="plasmo-z-50 plasmo-flex plasmo-fixed plasmo-top-32 plasmo-right-8">
+			<div className="plasmo-bg-blue-600 plasmo-text-white plasmo-px-3 plasmo-py-2 plasmo-rounded-lg plasmo-text-sm">
+				Wallet Extension Active
+			</div>
+		</div>
+	)
 }
 
 export default PlasmoOverlay

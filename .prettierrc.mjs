@@ -3,10 +3,10 @@
  */
 export default {
   printWidth: 80,
-  tabWidth: 2,
-  useTabs: false,
+  tabWidth: 4,
+  useTabs: true,
   semi: false,
-  singleQuote: false,
+  singleQuote: true,
   trailingComma: "none",
   bracketSpacing: true,
   bracketSameLine: true,
