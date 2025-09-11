@@ -39,7 +39,7 @@ export class BlockchainService {
 	/**
 	 * 初始化提供者
 	 */
-	private async initializeProvider(): Promise<void> {
+	async initializeProvider(): Promise<void> {
 		try {
 			const networkConfig = NETWORKS[this.currentNetwork]
 			if (!networkConfig) {
@@ -343,15 +343,15 @@ export class BlockchainService {
 
 		try {
 			const response = await fetch(
-			`https://api.chainbase.online/v1/account/nfts?chain_id=11155111&address=${address}&page=1&limit=100`,
+				`https://api.chainbase.online/v1/account/nfts?chain_id=11155111&address=${address}&page=1&limit=100`,
 				{
 					method: 'GET',
 					headers: {
-						'accept': 'application/json',
+						accept: 'application/json',
 						'x-api-key': '32Vheule5iRuLab4mBJhBnmctWi'
 					}
 				}
-			);
+			)
 			const data = await response.json()
 
 			if (data.error) {
