@@ -15,6 +15,6 @@
 
 /* 导出设计系统版本信息 */
 :root {
-  --design-system-version: '1.0.0';
-  --design-system-name: 'Wallet UI Design System';
+	--design-system-version: '1.0.0';
+	--design-system-name: 'Wallet UI Design System';
 }

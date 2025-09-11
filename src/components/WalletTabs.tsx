@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
+
+import { AccountService } from '~services/AccountService'
 
 import { MainWallet } from './MainWallet'
 import { NetworkSwitcher } from './NetworkSwitcher'
 import { NetworkTab } from './NetworkTab'
 import { NftTab } from './NftTab'
 import { OperationTab } from './OperationTab'
-import { AccountService } from '~services/AccountService'
 
 interface WalletTabsProps {
 	currentAccount: {
@@ -30,9 +31,9 @@ export const WalletTabs: React.FC<WalletTabsProps> = ({
 	]
 	const [currentNetwork, setCurrentNetwork] = useState<string>('sepolia')
 
-  useEffect(() => {
-    AccountService.initialize()
-  })
+	useEffect(() => {
+		AccountService.initialize()
+	})
 
 	return (
 		<div className="h-full flex flex-col">
